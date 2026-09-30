@@ -1,0 +1,150 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Escro Lápiz v1.1</title>
+<style>
+*{box-sizing:border-box}body{margin:0;font-family:system-ui,-apple-system,Segoe UI,sans-serif;background:#f5f1ea;color:#29251f}
+header{background:#302b24;color:white;padding:18px 24px;display:flex;justify-content:space-between;align-items:center}
+.logo{font-size:25px;font-weight:800}.version{font-size:12px;opacity:.7}
+nav button,.btn{border:0;border-radius:10px;padding:10px 15px;cursor:pointer;font-weight:700}
+nav button{background:#51493e;color:#fff;margin-left:6px}.primary{background:#d9a441;color:#211a10}.secondary{background:#e5ddd0;color:#342e26}
+main{max-width:1100px;margin:auto;padding:28px 20px}.screen{display:none}.screen.active{display:block}
+.hero{padding:28px;border-radius:18px;background:#fff;box-shadow:0 5px 20px #00000010;margin-bottom:22px}
+h1{margin:0 0 8px}h2{margin-top:0}.muted{color:#716a60}
+.books{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:18px}
+.book{background:white;border-radius:15px;overflow:hidden;box-shadow:0 4px 16px #00000012}.cover{height:230px;background:#ded5c7;display:flex;align-items:center;justify-content:center;font-size:55px;overflow:hidden}.cover img{width:100%;height:100%;object-fit:cover}.bookinfo{padding:14px}
+input,textarea{width:100%;padding:12px;border:1px solid #cfc6b8;border-radius:10px;background:#fff;font:inherit}textarea{min-height:250px;resize:vertical}
+label{font-weight:700;display:block;margin:14px 0 7px}.chapter-tabs{display:flex;gap:8px;flex-wrap:wrap;margin:18px 0}.chapter-tabs button.active{background:#302b24;color:white}
+.editor{background:white;padding:20px;border-radius:16px}.row{display:flex;gap:10px;align-items:center;flex-wrap:wrap}.pagebar{display:flex;justify-content:space-between;align-items:center;margin:12px 0}.notice{padding:12px;border-radius:10px;background:#fff4d7;margin:12px 0}.ok{background:#e3f4e5}.danger{background:#ffe3e0}.preview{background:#fff;border-radius:16px;padding:25px;min-height:300px;box-shadow:0 4px 15px #0000000d}.reader{max-width:760px;margin:auto}.reader p{font-size:18px;line-height:1.75;white-space:pre-wrap}
+.cover-upload{border:2px dashed #bdb3a5;padding:20px;border-radius:12px;text-align:center}
+@media(max-width:650px){header{align-items:flex-start;gap:10px;flex-direction:column}.books{grid-template-columns:repeat(2,1fr)}}
+</style>
+</head>
+<body>
+<header>
+<div><div class="logo">✏️ Escro Lápiz</div><div class="version">Versión 1.1</div></div>
+<nav><button onclick="show('home')">Inicio</button><button onclick="show('read')">Leer libros</button><button onclick="show('write')">Escribir libro</button></nav>
+</header>
+
+<main>
+<section id="home" class="screen active">
+<div class="hero"><h1>Bienvenido a Escro Lápiz</h1><p class="muted">Escribe, guarda y lee tus historias. En esta versión cada libro tiene exactamente 5 capítulos.</p><button class="btn primary" onclick="show('write')">✍️ Crear un libro</button></div>
+<h2>Libros</h2><div id="homeBooks" class="books"></div>
+</section>
+
+<section id="read" class="screen">
+<div class="hero"><h2>📖 Leer libros</h2><p class="muted">Continúa tus libros guardados desde donde los dejaste.</p></div>
+<div id="readBooks" class="books"></div>
+</section>
+
+<section id="write" class="screen">
+<div class="hero">
+<h2>✍️ Escribir libro</h2>
+<label>Título del libro</label><input id="title" placeholder="Escribe el título..." oninput="updateState()">
+<label>Portada</label>
+<div class="cover-upload">
+<input id="cover" type="file" accept="image/*" onchange="loadCover(event)">
+<p class="muted">Elige una imagen de tu galería.</p>
+<img id="coverPreview" style="max-width:180px;max-height:220px;border-radius:10px;display:none">
+</div>
+<div id="rules" class="notice">Un libro necesita <b>5 capítulos exactos</b>. Cada capítulo puede tener todas las páginas que necesites.</div>
+<div class="chapter-tabs" id="tabs"></div>
+<div class="editor">
+<h3 id="chapterTitle">Capítulo 1</h3>
+<div class="pagebar"><button class="btn secondary" onclick="prevPage()">← Página anterior</button><b id="pageLabel">Página 1</b><button class="btn secondary" onclick="nextPage()">Siguiente página →</button></div>
+<textarea id="pageText" placeholder="Escribe aquí el contenido de esta página..." oninput="updateState()"></textarea>
+</div>
+<div class="row" style="margin-top:15px">
+<button class="btn secondary" onclick="saveBook()">💾 Guardar</button>
+<button class="btn primary" onclick="finishBook()">✓ Marcar libro como terminado</button>
+<button class="btn" style="background:#6f8f72;color:white" onclick="publishBook()">🌐 Publicar</button>
+</div>
+<div id="status" class="notice"></div>
+</div>
+</section>
+
+<section id="reader" class="screen">
+<div class="reader">
+<div class="hero"><button class="btn secondary" onclick="show('read')">← Volver</button><h2 id="readerTitle"></h2><p id="readerChapter" class="muted"></p></div>
+<div class="preview"><div class="pagebar"><button class="btn secondary" onclick="readerPrev()">← Página anterior</button><b id="readerPage"></b><button class="btn secondary" onclick="readerNext()">Siguiente página →</button></div><p id="readerText"></p></div>
+</div>
+</section>
+</main>
+
+<script>
+const KEY="escroLapiz_v11";
+let state=JSON.parse(localStorage.getItem(KEY)||'null')||{books:[],draft:null};
+let chapter=0,page=0,readerBook=null,readerPage=0;
+
+function show(id){
+ document.querySelectorAll('.screen').forEach(x=>x.classList.remove('active'));
+ document.getElementById(id).classList.add('active');
+ if(id==='write') renderEditor();
+ if(id==='home') renderBooks('homeBooks');
+ if(id==='read') renderBooks('readBooks',true);
+}
+function newDraft(){
+ return {title:"",cover:"",finished:false,published:false,chapters:Array.from({length:5},()=>({pages:[""]})),progress:{chapter:0,page:0})};
+}
+if(!state.draft) state.draft=newDraft();
+
+function saveData(){localStorage.setItem(KEY,JSON.stringify(state))}
+function updateState(){
+ let d=state.draft;
+ d.title=document.getElementById('title').value;
+ d.chapters[chapter].pages[page]=document.getElementById('pageText').value;
+ saveData();
+}
+function loadCover(e){
+ const f=e.target.files[0]; if(!f)return;
+ const r=new FileReader(); r.onload=()=>{state.draft.cover=r.result;document.getElementById('coverPreview').src=r.result;document.getElementById('coverPreview').style.display='block';saveData();renderStatus()};r.readAsDataURL(f);
+}
+function renderEditor(){
+ const d=state.draft;
+ document.getElementById('title').value=d.title||'';
+ if(d.cover){let x=document.getElementById('coverPreview');x.src=d.cover;x.style.display='block'}
+ renderTabs(); loadPage(); renderStatus();
+}
+function renderTabs(){
+ document.getElementById('tabs').innerHTML=state.draft.chapters.map((_,i)=>`<button class="btn secondary ${i===chapter?'active':''}" onclick="switchChapter(${i})">Capítulo ${i+1}</button>`).join('');
+}
+function switchChapter(i){updateState();chapter=i;page=0;renderTabs();loadPage()}
+function loadPage(){
+ let p=state.draft.chapters[chapter].pages[page]??"";
+ document.getElementById('chapterTitle').textContent=`Capítulo ${chapter+1}`;
+ document.getElementById('pageLabel').textContent=`Página ${page+1} de ${state.draft.chapters[chapter].pages.length}`;
+ document.getElementById('pageText').value=p;
+}
+function nextPage(){updateState();let ps=state.draft.chapters[chapter].pages;if(page<ps.length-1)page++;else{ps.push("");page=ps.length-1}loadPage()}
+function prevPage(){updateState();if(page>0)page--;loadPage()}
+function saveBook(){updateState();saveData();renderStatus();alert("Borrador guardado. Puedes volver más tarde y continuar.");}
+function allContent(){return state.draft.chapters.every(c=>c.pages.some(p=>p.trim().length>0))}
+function finishBook(){updateState();state.draft.finished=true;saveData();renderStatus()}
+function renderStatus(){
+ let d=state.draft, ready=d.title.trim()&&d.cover&&d.finished&&allContent();
+ document.getElementById('status').className='notice '+(ready?'ok':'');
+ document.getElementById('status').innerHTML=ready?'✅ <b>Listo para publicar.</b>':'🔒 Para publicar necesitas título, portada, los 5 capítulos con contenido y marcar el libro como terminado.';
+}
+function publishBook(){
+ updateState();let d=state.draft;
+ if(!(d.title.trim()&&d.cover&&d.finished&&allContent())){renderStatus();alert("No se puede publicar todavía. Completa los requisitos indicados.");return}
+ d.published=true;state.books.push(JSON.parse(JSON.stringify(d)));state.draft=newDraft();chapter=0;page=0;saveData();alert("🎉 ¡Libro publicado!");show('read');
+}
+function renderBooks(target,onlyPublished=false){
+ let el=document.getElementById(target), arr=state.books.filter(b=>!onlyPublished||b.published);
+ if(!arr.length){el.innerHTML='<div class="hero"><p class="muted">Todavía no hay libros publicados.</p></div>';return}
+ el.innerHTML=arr.map((b,i)=>`<article class="book"><div class="cover">${b.cover?`<img src="${b.cover}">`:'📚'}</div><div class="bookinfo"><b>${esc(b.title)}</b><p class="muted">5 capítulos</p><button class="btn primary" onclick="openReader(${state.books.indexOf(b)})">Leer</button></div></article>`).join('');
+}
+function esc(s){return String(s).replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]))}
+function openReader(i){readerBook=state.books[i];readerPage=(readerBook.progress?.chapter||0)*100000+(readerBook.progress?.page||0); // recalculated below
+ readerChapter=readerBook.progress?.chapter||0; readerP=readerBook.progress?.page||0; show('reader');loadReader()}
+let readerChapter=0,readerP=0;
+function loadReader(){document.getElementById('readerTitle').textContent=readerBook.title;document.getElementById('readerChapter').textContent=`Capítulo ${readerChapter+1} de 5`;document.getElementById('readerPage').textContent=`Página ${readerP+1} de ${readerBook.chapters[readerChapter].pages.length}`;document.getElementById('readerText').textContent=readerBook.chapters[readerChapter].pages[readerP]||'(Página sin texto)';readerBook.progress={chapter:readerChapter,page:readerP};saveData()}
+function readerNext(){let ps=readerBook.chapters[readerChapter].pages;if(readerP<ps.length-1)readerP++;else if(readerChapter<4){readerChapter++;readerP=0}else return;loadReader()}
+function readerPrev(){if(readerP>0)readerP--;else if(readerChapter>0){readerChapter--;readerP=readerBook.chapters[readerChapter].pages.length-1}else return;loadReader()}
+renderBooks('homeBooks');renderEditor();
+</script>
+</body>
+</html>
